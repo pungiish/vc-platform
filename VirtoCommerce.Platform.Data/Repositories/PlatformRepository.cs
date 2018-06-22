@@ -37,6 +37,17 @@ namespace VirtoCommerce.Platform.Data.Repositories
         {
             modelBuilder.Conventions.Remove<PluralizingTableNameConvention>();
 
+            #region Assets
+            modelBuilder.Entity<AssetEntryEntity>().ToTable("AssetEntry").HasKey(x => x.Id).Property(x => x.Id);
+
+            modelBuilder.Entity<AssetEntryEntity>()
+                .Property(x => x.TenantId)
+                .HasColumnAnnotation("Index", new IndexAnnotation(new IndexAttribute("IX_AssetEntry_TenantId_TenantType", 1) { IsUnique = false }));
+            modelBuilder.Entity<AssetEntryEntity>()
+                .Property(x => x.TenantType)
+                .HasColumnAnnotation("Index", new IndexAnnotation(new IndexAttribute("IX_AssetEntry_TenantId_TenantType", 2) { IsUnique = false }));
+            #endregion
+
             #region Change logging
             modelBuilder.Entity<OperationLogEntity>().HasKey(x => x.Id)
                         .Property(x => x.Id);
@@ -52,6 +63,10 @@ namespace VirtoCommerce.Platform.Data.Repositories
                 .HasRequired(x => x.Setting)
                 .WithMany(x => x.SettingValues)
                 .HasForeignKey(x => x.SettingId);
+
+            modelBuilder.Entity<SettingValueEntity>()
+                .Property(x => x.DecimalValue)
+                .HasPrecision(18, 5);
 
             #endregion
 
@@ -86,6 +101,10 @@ namespace VirtoCommerce.Platform.Data.Repositories
                 .HasOptional(x => x.DictionaryItem)
                 .WithMany(x => x.ObjectValues)
                 .HasForeignKey(x => x.DictionaryItemId);
+
+            modelBuilder.Entity<DynamicPropertyObjectValueEntity>()
+                .Property(x => x.DecimalValue)
+                .HasPrecision(18, 5);
 
             modelBuilder.Entity<DynamicPropertyEntity>()
                 .Property(x => x.ObjectType)
@@ -207,6 +226,13 @@ namespace VirtoCommerce.Platform.Data.Repositories
         public IQueryable<RoleAssignmentEntity> RoleAssignments { get { return GetAsQueryable<RoleAssignmentEntity>(); } }
         public IQueryable<RolePermissionEntity> RolePermissions { get { return GetAsQueryable<RolePermissionEntity>(); } }
         public IQueryable<OperationLogEntity> OperationLogs { get { return GetAsQueryable<OperationLogEntity>(); } }
+        public IQueryable<AssetEntryEntity> AssetEntries => GetAsQueryable<AssetEntryEntity>();
+
+
+        public AssetEntryEntity[] GetAssetsByIds(IEnumerable<string> ids)
+        {
+            return AssetEntries.Where(x => ids.Contains(x.Id)).ToArray();
+        }
 
         public RoleEntity GetRoleById(string roleId)
         {
@@ -263,10 +289,10 @@ namespace VirtoCommerce.Platform.Data.Repositories
             return retVal;
         }
 
-        public DynamicPropertyEntity[] GetDynamicPropertiesForType(string objectType)
+        public DynamicPropertyEntity[] GetDynamicPropertiesForTypes(string[] objectTypes)
         {
             var retVal = DynamicProperties.Include(p => p.DisplayNames)
-                                          .Where(p => p.ObjectType == objectType)
+                                          .Where(p => objectTypes.Contains(p.ObjectType))
                                           .OrderBy(p => p.Name)
                                           .ToArray();
             return retVal;

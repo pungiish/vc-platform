@@ -17,11 +17,11 @@
             if (wizard.currentStep != step) {
                 wizard.currentStep = step;
                 settings.update([{ name: 'VirtoCommerce.SetupStep', value: state }], function () {
-                    $state.go(state);
+                    $state.go(state, step);
                 });
             }
             else {
-                $state.go(state);
+                $state.go(state, step);
             }  
 		},
 
@@ -46,23 +46,29 @@
             return settings.getValues({ id: "VirtoCommerce.SetupStep" }).$promise.then(function (data) {
 				if (angular.isArray(data) && data.length > 0) {
                     wizard.currentStep = wizard.findStepByState(data[0]);
+                    wizard.isCompleted = wizard.currentStep === undefined;
                 }
                 return wizard;
 			});
         },
-        currentStep: undefined
+        currentStep: undefined,
+        isCompleted: false
 	};
 	return wizard;
 }])
 .run(
-  ['$rootScope', '$state', 'platformWebApp.setupWizard', 'platformWebApp.settings', '$timeout', function ($rootScope, $state, setupWizard, settings, $timeout) {
+    ['$rootScope', '$state', 'platformWebApp.setupWizard', 'platformWebApp.settings', '$timeout', function ($rootScope, $state, setupWizard, settings, $timeout) {
   	//Try to run setup wizard
   	$rootScope.$on('loginStatusChanged', function (event, authContext) {
   		if (authContext.isAuthenticated) {
   			//timeout need because $state not fully loading in run method and need to wait little time
                 $timeout(function () {
                     setupWizard.load().then(
-                        function (wizard) { wizard.showStep(wizard.currentStep); });
+                        function (wizard) {
+                            if (!wizard.isCompleted) {
+                                wizard.showStep(wizard.currentStep);
+                            }                           
+                        });
                 }, 500);
   		}
   	});

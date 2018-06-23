@@ -26,14 +26,17 @@ using Microsoft.Owin.StaticFiles;
 using Microsoft.Practices.Unity;
 using Owin;
 using VirtoCommerce.Platform.Core.Assets;
+using VirtoCommerce.Platform.Core.Bus;
 using VirtoCommerce.Platform.Core.ChangeLog;
 using VirtoCommerce.Platform.Core.Common;
 using VirtoCommerce.Platform.Core.DynamicProperties;
+using VirtoCommerce.Platform.Core.Events;
 using VirtoCommerce.Platform.Core.ExportImport;
 using VirtoCommerce.Platform.Core.Modularity;
 using VirtoCommerce.Platform.Core.Notifications;
 using VirtoCommerce.Platform.Core.PushNotifications;
 using VirtoCommerce.Platform.Core.Security;
+using VirtoCommerce.Platform.Core.Security.Events;
 using VirtoCommerce.Platform.Core.Serialization;
 using VirtoCommerce.Platform.Core.Settings;
 using VirtoCommerce.Platform.Core.Web.Common;
@@ -46,6 +49,7 @@ using VirtoCommerce.Platform.Data.Infrastructure.Interceptors;
 using VirtoCommerce.Platform.Data.Notifications;
 using VirtoCommerce.Platform.Data.Repositories;
 using VirtoCommerce.Platform.Data.Security;
+using VirtoCommerce.Platform.Data.Security.Handlers;
 using VirtoCommerce.Platform.Data.Security.Identity;
 using VirtoCommerce.Platform.Data.Serialization;
 using VirtoCommerce.Platform.Data.Settings;
@@ -651,7 +655,9 @@ namespace VirtoCommerce.Platform.Web
                 container.RegisterInstance<IBlobStorageProvider>(azureBlobProvider);
                 container.RegisterInstance<IBlobUrlResolver>(azureBlobProvider);
             }
-
+            
+            container.RegisterType <IAssetEntryService, AssetEntryService>(new ContainerControlledLifetimeManager());
+            container.RegisterType <IAssetEntrySearchService, AssetEntryService>(new ContainerControlledLifetimeManager());
 
             #endregion
 
@@ -691,6 +697,8 @@ namespace VirtoCommerce.Platform.Web
 
             container.RegisterType<ISecurityService, SecurityService>();
 
+
+
             #endregion
 
             #region ExportImport
@@ -701,6 +709,16 @@ namespace VirtoCommerce.Platform.Web
 
             container.RegisterType<IExpressionSerializer, XmlExpressionSerializer>();
 
+            #endregion
+
+            #region Events
+            var inProcessBus = new InProcessBus();
+            container.RegisterInstance<IHandlerRegistrar>(inProcessBus);
+            container.RegisterInstance<IEventPublisher>(inProcessBus);
+
+            inProcessBus.RegisterHandler<UserChangedEvent>(async (message, token) => await container.Resolve<LogChangesUserChangedEventHandler>().Handle(message));
+            inProcessBus.RegisterHandler<UserPasswordChangedEvent>(async (message, token) => await container.Resolve<LogChangesUserChangedEventHandler>().Handle(message));
+            inProcessBus.RegisterHandler<UserResetPasswordEvent>(async (message, token) => await container.Resolve<LogChangesUserChangedEventHandler>().Handle(message));
             #endregion
         }
 

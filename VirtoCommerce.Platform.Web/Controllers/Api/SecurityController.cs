@@ -7,6 +7,7 @@ using System.Web.Http;
 using System.Web.Http.Description;
 using Microsoft.AspNet.Identity.Owin;
 using Microsoft.Owin.Security;
+using Swashbuckle.Swagger.Annotations;
 using VirtoCommerce.Platform.Core.Common;
 using VirtoCommerce.Platform.Core.Events;
 using VirtoCommerce.Platform.Core.Notifications;
@@ -120,7 +121,7 @@ namespace VirtoCommerce.Platform.Web.Controllers.Api
             return Ok(user);
         }
 
-
+       
         /// <summary>
         /// Get user details by user email
         /// </summary>
@@ -131,7 +132,7 @@ namespace VirtoCommerce.Platform.Web.Controllers.Api
         [ResponseType(typeof(ApplicationUserExtended))]
         [CheckPermission(Permission = PredefinedPermissions.SecurityQuery)]
         public async Task<IHttpActionResult> GetUserByEmail(string email)
-        {
+        { 
             var user = await _securityService.FindByEmailAsync(email, UserDetails.Export);
             ApplyAuthorizationRulesForUser(user);
             return Ok(user);
@@ -262,7 +263,9 @@ namespace VirtoCommerce.Platform.Web.Controllers.Api
         /// </remarks>
         [HttpPut]
         [Route("apiaccounts/newKey")]
-        [ResponseType(typeof(void))]
+        [ResponseType(typeof(ApiAccount))]
+        [SwaggerResponse(HttpStatusCode.OK, type: typeof(ApiAccount))]
+        [SwaggerResponse(HttpStatusCode.BadRequest, type: typeof(string))]
         [CheckPermission(Permission = PredefinedPermissions.SecurityUpdate)]
         public IHttpActionResult GenerateNewApiKey(ApiAccount account)
         {
@@ -341,12 +344,14 @@ namespace VirtoCommerce.Platform.Web.Controllers.Api
         [HttpPost]
         [Route("users/create")]
         [ResponseType(typeof(SecurityResult))]
+        [SwaggerResponse(HttpStatusCode.OK, type: typeof(SecurityResult))]
+        [SwaggerResponse(HttpStatusCode.BadRequest, type: typeof(SecurityResult))]
         [CheckPermission(Permission = PredefinedPermissions.SecurityCreate)]
         public async Task<IHttpActionResult> CreateAsync(ApplicationUserExtended user)
         {
             //ClearSecurityProperties(user);
             var result = await _securityService.CreateAsync(user);
-            return Ok(result);
+            return Content(result.Succeeded ? HttpStatusCode.OK : HttpStatusCode.BadRequest, result);
         }
 
         /// <summary>
@@ -357,13 +362,15 @@ namespace VirtoCommerce.Platform.Web.Controllers.Api
         [HttpPost]
         [Route("users/{userName}/changepassword")]
         [ResponseType(typeof(SecurityResult))]
+        [SwaggerResponse(HttpStatusCode.OK, type: typeof(SecurityResult))]
+        [SwaggerResponse(HttpStatusCode.BadRequest, type: typeof(SecurityResult))]
         [CheckPermission(Permission = PredefinedPermissions.SecurityQuery)]
         public async Task<IHttpActionResult> ChangePassword(string userName, [FromBody] ChangePasswordInfo changePassword)
         {
             EnsureUserIsEditable(userName);
 
             var result = await _securityService.ChangePasswordAsync(userName, changePassword.OldPassword, changePassword.NewPassword);
-            return Ok(result);
+            return Content(result.Succeeded ? HttpStatusCode.OK : HttpStatusCode.BadRequest, result);
         }
 
         /// <summary>
@@ -374,13 +381,15 @@ namespace VirtoCommerce.Platform.Web.Controllers.Api
         [HttpPost]
         [Route("users/{userName}/resetpassword")]
         [ResponseType(typeof(SecurityResult))]
+        [SwaggerResponse(HttpStatusCode.OK, type: typeof(SecurityResult))]
+        [SwaggerResponse(HttpStatusCode.BadRequest, type: typeof(SecurityResult))]
         [CheckPermission(Permission = PredefinedPermissions.SecurityUpdate)]
         public async Task<IHttpActionResult> ResetPassword(string userName, [FromBody] ResetPasswordInfo resetPassword)
         {
             EnsureUserIsEditable(userName);
 
             var result = await _securityService.ResetPasswordAsync(userName, resetPassword.NewPassword);
-            return Ok(result);
+            return Content(result.Succeeded ? HttpStatusCode.OK : HttpStatusCode.BadRequest, result);
         }
 
         /// <summary>
@@ -389,10 +398,25 @@ namespace VirtoCommerce.Platform.Web.Controllers.Api
         [HttpPost]
         [Route("users/{userId}/resetpasswordconfirm")]
         [ResponseType(typeof(SecurityResult))]
+        [SwaggerResponse(HttpStatusCode.OK, type: typeof(SecurityResult))]
+        [SwaggerResponse(HttpStatusCode.BadRequest, type: typeof(SecurityResult))]
         [AllowAnonymous]
         public async Task<IHttpActionResult> ResetPasswordByToken(string userId, [FromBody] ResetPasswordInfo resetPassword)
         {
             var result = await _securityService.ResetPasswordAsync(userId, resetPassword.Token, resetPassword.NewPassword);
+            return Content(result.Succeeded ? HttpStatusCode.OK : HttpStatusCode.BadRequest, result);
+        }
+
+        /// <summary>
+        /// Validate password reset token
+        /// </summary>
+        [HttpPost]
+        [Route("users/{userId}/validatepasswordresettoken")]
+        [ResponseType(typeof(bool))]
+        [AllowAnonymous]
+        public async Task<IHttpActionResult> ValidatePasswordResetToken(string userId, [FromBody] ResetPasswordTokenInfo resetPasswordToken)
+        {
+            var result = await _securityService.ValidatePasswordResetTokenAsync(userId, resetPasswordToken.Token);
             return Ok(result);
         }
 
@@ -440,20 +464,14 @@ namespace VirtoCommerce.Platform.Web.Controllers.Api
                     var sender = ConfigurationHelper.GetAppSettingsValue("VirtoCommerce:Notifications:Sender:Email")
                         ?? "noreply@" + Request.RequestUri.Host;
 
-                    var notification = _notificationManager.GetNewNotification<ResetPasswordEmailNotification>("Platform", typeof(ResetPasswordEmailNotification).Name, "en");
+                    var notification = _notificationManager.GetNewNotification<ResetPasswordEmailNotification>("Platform", typeof(ResetPasswordEmailNotification).Name, "en-US");
                     notification.Url = $"{uri}/#/resetpassword/{user.Id}/{token}";
                     notification.Recipient = user.Email;
                     notification.Sender = sender;
 
                     try
                     {
-                        var result = _notificationManager.SendNotification(notification);
-
-                        retVal.Succeeded = result.IsSuccess;
-                        if (!retVal.Succeeded)
-                        {
-                            retVal.Errors = new[] { result.ErrorMessage };
-                        }
+                        _notificationManager.ScheduleSendNotification(notification);
                     }
                     catch (Exception ex)
                     {
@@ -478,6 +496,8 @@ namespace VirtoCommerce.Platform.Web.Controllers.Api
         [HttpPut]
         [Route("users")]
         [ResponseType(typeof(SecurityResult))]
+        [SwaggerResponse(HttpStatusCode.OK, type: typeof(SecurityResult))]
+        [SwaggerResponse(HttpStatusCode.BadRequest, type: typeof(SecurityResult))]
         [CheckPermission(Permission = PredefinedPermissions.SecurityUpdate)]
         public async Task<IHttpActionResult> UpdateAsync(ApplicationUserExtended user)
         {
@@ -485,7 +505,7 @@ namespace VirtoCommerce.Platform.Web.Controllers.Api
 
             //ClearSecurityProperties(user);
             var result = await _securityService.UpdateAsync(user);
-            return Ok(result);
+            return Content(result.Succeeded ? HttpStatusCode.OK : HttpStatusCode.BadRequest, result);
         }
 
         /// <summary>
@@ -527,11 +547,13 @@ namespace VirtoCommerce.Platform.Web.Controllers.Api
         [HttpPost]
         [Route("users/{id}/unlock")]
         [ResponseType(typeof(SecurityResult))]
+        [SwaggerResponse(HttpStatusCode.OK, type: typeof(SecurityResult))]
+        [SwaggerResponse(HttpStatusCode.BadRequest, type: typeof(SecurityResult))]
         [CheckPermission(Permission = PredefinedPermissions.SecurityUpdate)]
         public async Task<IHttpActionResult> UnlockUserAsync(string id)
         {
             var result = await _securityService.UnlockUserAsync(id);
-            return Ok(result);
+            return Content(result.Succeeded ? HttpStatusCode.OK : HttpStatusCode.BadRequest, result);
         }
 
         private void ApplyAuthorizationRulesForUser(ApplicationUserExtended user)
